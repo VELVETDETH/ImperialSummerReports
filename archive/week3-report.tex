@@ -17,6 +17,7 @@ The main advantage of this format is its simplicity in implementation, but it wi
 \paragraph{Optimization} The detailed statistics will be updated by next week, but here I'll list several ideas of optimization:
 \begin{enumerate}
 \item \textit{Reduce redundant calculation}: Currently the number of redundant calculation depends on the maximal number of non-zeros of all rows in the matrix. We could reorganize our output data and let number of padding zeros depend on the maximal number of non-zeros of all rows in each simultaneously calculated groups. After that, we could also reorder the matrix rows to get the best placement of rows into different groups, and get a globally optimizated result.
+\item \textit{Summation tree}: Current version of SpMV is based on a cyclic loop, which will sum the results for each row. A summation tree implementation should be better.
 \item \textit{Reduce resource usage}: We could do this by using dual-port of ROM, and if possible, using multi-pumping.
 \end{enumerate}
 
@@ -40,5 +41,11 @@ The main advantage of this format is its simplicity in implementation, but it wi
 \subsubsection{Ruby Compiler}
 
 I haven't checked the compiler last week, but I'll start it as soon as possible. Basically, I should first use ruby to do some basic design, compile it into MaxJ and run it. After that, try to do some loop in Ruby. And test its MaxJ result (Which may not be correct).
+
+\paragraph{TODO}
+\begin{enumerate}
+\item \textit{Loops in Ruby}: Test loops in Ruby, including acyclic loops and cyclic loops. Simulate them and check its generated MaxJ code.
+\end{enumerate}
+
 
 
