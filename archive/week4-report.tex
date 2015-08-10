@@ -1,0 +1,20 @@
+
+\subsection{Report of Week 4 (Aug 4th, 2015)}
+
+This week I've made progress on all the 3 directions: SpMV in MaxJ, multi-pumping in MaxJ and multi-pumping in Ruby. Here're the details.
+
+\subsubsection{SpMV in MaxJ}
+According to the plan, I've finished the baseline version of CSRp SpMV on time. You could find out the definition of CSRp in the archived week 3 report. This version will generate correct result, but it must be improved in many aspects:
+\begin{enumerate}
+\item 
+\textbf{Get runtime correct}: Currently, if we add level of parallelization, the run time will increase, not as what we expected. If the code is correct(maybe not), then something wrong might happen during synthesis and implementation. Check the \textbf{clock frequency} of the \textbf{built kernel}. This will tell whether there's problem during the implementation: if the clock frequency also not follow our expectation.
+\item
+\textbf{Improved CSRp format}: The CSRp format will perform really bad if the padded zeros occupy most of the computations, which means, we have lots of redundant zeros. Why we have those zeros? As we cannot calculate all the rows simultaneously, only part of the rows will be calculate at the same time. If we call these rows a \textbf{block}, then we will calculate the whole matrix block by block. Now, we do not specifically add \textbf{splitters} between those blocks. We would know which block we are calculating only by forcing all the blocks has equal width. The way we force this happen is by padding zeros. The number of padding zeros could be enormous if we have a very wide block and most of the blocks are quite narrow. The \textbf{redundancy} metrics could be calculated by using:
+
+\[ R_{CSRp}(N) = 
+	\max_{0\leq i \lt N}(block_i.width)\time N \time p - 
+	\sum_{i}^{Np} row_i.width 
+\]
+
+Obviously, we could improve this, but we need more information
+\end{enumerate}
