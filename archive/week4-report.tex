@@ -8,13 +8,33 @@ According to the plan, I've finished the baseline version of CSRp SpMV on time. 
 \begin{enumerate}
 \item 
 \textbf{Get runtime correct}: Currently, if we add level of parallelization, the run time will increase, not as what we expected. If the code is correct(maybe not), then something wrong might happen during synthesis and implementation. Check the \textbf{clock frequency} of the \textbf{built kernel}. This will tell whether there's problem during the implementation: if the clock frequency also not follow our expectation.
+
+It might be the case that the current using matrix will never benefit from the level of parallelization, so we need to generate matrix based on our current design specification, and discover their performance.
+
+\textbf{Todo} First check out the frequency of each design with different parallelization level. Also try to organize the code better.Then use randomized benchmark, not only the value, but also the structure to test run time result. 
+
 \item
 \textbf{Improved CSRp format}: The CSRp format will perform really bad if the padded zeros occupy most of the computations, which means, we have lots of redundant zeros. Why we have those zeros? As we cannot calculate all the rows simultaneously, only part of the rows will be calculate at the same time. If we call these rows a \textbf{block}, then we will calculate the whole matrix block by block. Now, we do not specifically add \textbf{splitters} between those blocks. We would know which block we are calculating only by forcing all the blocks has equal width. The way we force this happen is by padding zeros. The number of padding zeros could be enormous if we have a very wide block and most of the blocks are quite narrow. The \textbf{redundancy} metrics could be calculated by using:
 
 \[ R_{CSRp}(N) = 
-	\max_{0\leq i \lt N}(block_i.width)\time N \time p - 
+	\max_{0 \leq i < N}(block_i.width)\times N \times p - 
 	\sum_{i}^{Np} row_i.width 
 \]
 
-Obviously, we could improve this, but we need more information
+where N is the number of blocks, and p is the level of parallelization. If we have N and p assigned, then the whole number of rows should be Np. The \textbf{width} is the number of non-zeros for each row or block. Especially for blocks, their width is the maximal width among all rows in that block.
+
+Obviously, we could improve this. If we assign more information for each clock cycle, like "whether this cycle is in the end of one block", which is the \textbf{splitter} that we have mentioned above, then we do not need to do padding on all the blocks to make sure they have same width.
+
+This one could be achieved by adding a new input stream of 0, 1 boolean values. We could verify the improvement in speed and space increasement.
+
+\textbf{Todo}: Finish the first part of SpMV work first. And build this design later. Discover their performance differences. And I think this is one should be the standard design of \textbf{baseline}. Previous one has really bad performance.
+
+\item
+\textbf{With multi-pumping}: I've already finished a multi-pumping MaxJ version, which has a simple multiplier inside. And we all know that SpMV is all about add and multiply(basically), so we could use the same framework to optimize this SpMV design.
+
+\textbf{Todo}: Last one to do, I think I could do this in the next week.
 \end{enumerate}
+
+That's all about this week's SpMV work, I'll attach a full chart about this design's performance in next week's report, as I need to verify some current data this week.
+
+\subsubsection{Multi-pumping in MaxJ}
