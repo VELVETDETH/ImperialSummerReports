@@ -1,15 +1,4 @@
-\documentclass{article}
-\usepackage{fontspec}
-\setmainfont{Lucida Bright}
-\setmonofont{Lucida Sans Typewriter}
 
-\usepackage{listings}
-\lstset{
-	language=Java,
-	basicstyle=\footnotesize\ttfamily,
-}  
-
-\begin{document}
 
 \section{Week 7: Ruby serial primitives}
 
@@ -37,4 +26,4 @@ private DFEVar pdsr2(DFEVar t0,DFEVar t1) {
 
 This snippet of code is auto-generated, and suit for different value of n in \texttt{pdsr n} expression.
 
-\end{document}
+But for \texttt{sdpr}, things will be different, as no 2 or more number of output ports device will be supported in \texttt{printmax}, I think maybe it's better to optimize this by using \texttt{DFEVector}.
