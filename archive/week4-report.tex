@@ -37,4 +37,26 @@ This one could be achieved by adding a new input stream of 0, 1 boolean values. 
 
 That's all about this week's SpMV work, I'll attach a full chart about this design's performance in next week's report, as I need to verify some current data this week.
 
-\subsubsection{Multi-pumping in MaxJ}
+\subsubsection{Multi-pumping in MaxJ(Updated on Aug 25th 2015)}
+
+In this part I'll just illustrate some result I've gathered in my Multi-pumping MaxJ version's experiment. 
+
+First of all, we have these versions to implement the simple multiplication functionality:
+\begin{enumerate}
+\item \textbf{UnrollLoop}: This one will use 1x clock rate for multiplier, but will use 2 of them.
+\item \textbf{ResourceShare}: This one will use one single multiplier to do 2 multiplications sequentially, at 1x clock rate.
+\item \textbf{Multi-pumping}: This one will use 1 multiplier, running at 2x clock rate. And other parts running at 1x clock rate. 
+\end{enumerate}
+
+What we expect about these versions are:
+\begin{enumerate}
+\item Multi-pumped version will save number of DSPs compared to the origin version, which will use 2 multiplier to finish 2 multiplication in one 1x clock rate cycle. 
+\item Multi-pumped version will be 2x faster than the resource sharing version, which will not use more multiplier, just finish the 2 multiplication one by one. 
+\end{enumerate}
+
+And the result looks the same:
+\begin{enumerate}
+\item \textbf{Speed}: UnrollLoop version has the fastest frequency(178MHz), and multi-pumping has similiar result(171MHz). ResourceShare version could just achieve have of the frequency(92.1MHz).
+\item \textbf{Resource Usage}: For the DSPs, it's obvious that UnrollLoop will use 2 and the others two version will use one. And it should be true that Multi-pumping will have more logics usage(14479) that ResourceShare(13923) as it will have more control logic.
+\end{enumerate}
+
