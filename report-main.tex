@@ -1,8 +1,7 @@
 \documentclass[a4paper, 10pt]{article}
 
 \usepackage{fontspec}
-\setmainfont{Lucida Bright}
-\usepackage{fullpage}
+\setmainfont{Georgia}
 
 
 \begin{document}
@@ -12,11 +11,69 @@
 		\texttt{vincentzhaorz@gmail.com}}
 \maketitle
 
+\begin{abstract}
+This is the 7th week of my summer research, and this report will contain mainly what I've done in the past 2 weeks, including MaxJ SpMV inplementation, Ruby multipumping implementation, and some bug fix in Ruby compiler.
+\end{abstract}
+\newpage
+
 \tableofcontents
 
 \newpage
 
-\section{Introduction}
+\section{MaxJ SpMV Implementation}
+
+Compressed Sparse Row(CSR) is a famous sparse matrix storage method, it pull all the non zeros to the left of their own row, and store their original column index before they have been aligned. I'm building my SpMV algorithm based on this format. 
+
+\subsection{CSRP format introduction}
+In order to reduce complex control logic which could slow down the processing and introduce bugs, there'll be \textbf{padding} zeros at the end of each row, in order to make those rows, which will be processed together, have the same number of elements to calculate(although there'll be some useless zeros). That's the idea about CSRP format.
+
+\subsubsection{Redundancy formalization}
+
+If we align all our rows to the row with maximal number of nonzeros, then we could imagine there'll be lots of redundancy. As we will process only a small number of rows at the same time(number of pipes), we could just align rows to the longest row in each \textbf{processing group}.
+
+Let's formalize this description: If we have N rows for one sparse matrix, and for row $i$ it has $L_i$ number of non zeros. And if we group all these rows by $R$, which is the number of pipes for our design, then all these $R$ rows in one group will be calculated together. So we could devise this formula:
+
+The lower bound of our \textbf{redundant} calculation cycles will be:
+\begin{equation}
+Redundant\ cycles = \sum_{i}^{N/R} R \times \max_{j}^{R} L_{i\times R + j} - \sum_{i}^{N} L_i
+\end{equation}
+
+\subsubsection{Redundancy Optimization}
+
+If we transform formula (1) to this form:
+
+\begin{equation}
+Redundant\ cycles = \sum_{i}^{N/R} (R \times \max_{j}^{R} L_{i\times R + j} - \sum_{j}^{R} L_{i \times R + j})
+\end{equation}
+
+So here's a heuristic rule: we need to make sure there's no such case, that a very long row and several short rows coexist in one group. According to this idea, we could simply do a \textbf{sorting} on the rows by their length(which is a greedy algorithm). Is this really the best solution? We could easily prove it. 
+
+Imagine that we have $N/R$ "buckets", each bucket could contain $R$ rows. And now we need to put rows inside those buckets. We suppose that the best solution is put rows one by one in the sorted sequence, which means that the rows in the first group will be the rows with top $R$ number of non zeros.
+
+If there's a better solution than this one, then it should have swapped some of its elements. If we swap 2 rows between 2 groups, then it will increase redundancy in both groups.
+
+\subsection{Performance}
+
+I've tested this format with different $R$ value, and 2 extreme sparse matrix format: dense and triagle. The following features have been discovered:
+\begin{enumerate}
+\item The maximal performance I could get is by using design with $R$ equals to 32, and for dense matrix, GFlops is 0.28, for triangle matrix, it's 0.22.
+\item With larger $R$ value, the performance increase at first, and the fall down.
+\item If $R$ is larger, then redundancy will be larger.
+\end{enumerate}
+
+More detailed test and report will be attached once I've finished the final version.
+
+\section{Ruby Multi-Pumping Implementation}
+
+\subsection{Ruby serialization primitives}
+
+\subsection{Different aspects and implementations}
+
+\section{Ruby cyclic loop}
+
+\subsection{Problem: MaxCompiler auto-pipelining}
+
+\subsection{Solution}
 
 \newpage
 
