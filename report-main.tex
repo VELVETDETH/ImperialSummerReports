@@ -87,9 +87,33 @@ Referring to the BCSR format, we will calculate multiple multiplication in one s
 
 \section{Ruby Multi-Pumping Implementation}
 
+In this section I'm going to make a summary about current progress on Ruby multi-pumping. 
+
 \subsection{Ruby serialization primitives}
 
-\subsection{Different aspects and implementations}
+If we want to implement multi-pumping in Ruby, the first thing we must specify is: how could we have different clock rate in Ruby? The basic primitive about clock rate changing is \texttt{pdsr} and \texttt{sdpr}. The first one will change a n length list to n cycles of one element output, which will slow down the clock rate to 1/n. The \texttt{sdpr} will perform reversely.
+
+\subsection{Perspectives}
+
+Just take one simple example. If we want to multi pump +1 operation, and as inc(which is +1) has only 1 input and 1 output, then we could simply decide that the input for multi pumped inc is <x, y>, a 2-list. 
+
+Here're 2 different approach:
+\begin{enumerate}
+\item \textbf{Single kernel}: we just have one kernel which runs at 2x clock rate, and 2 input streams has interleaved, 1x clock rate input.
+\item \textbf{Multi kernel}: we run the kernel at 2x clock rate, but the input stream will run at 1x clock rate.
+\end{enumerate}
+
+Here's an example, for the single kernel approach, the input would be like: $\mathtt{<x_0,\_>, <\_,y_0>,<x_1,\_>,<\_,y_1>,...}$. Please notice that this stream runs at 2x clock rate. For the second approach, we will have $\mathtt{<x_0,y_0>,<x_1,y_1>,...}$ as input stream, and this stream will run at 1x clock rate.
+
+The first one is simple but not so general. The second one is more accurate and harder to implement, especially for Ruby to MaxJ translation, as we need to generate manager and kernel at the same time.
+
+\subsection{Implementation}
+
+Here I'll introduce the solution for the second approach, which will be the test case of our Ruby to MaxJ translation function.
+
+First we need to change the clock rate of input, which could be implemented by using \texttt{pdsr 2}. And then, do inc for each element. At last, use \texttt{sdpr 2} to bundle 2 output as 1.
+
+Here's a single line of code: \lstinline{current = pdsr 2; inc; sdpr 2.}
 
 \section{Ruby cyclic loop}
 
