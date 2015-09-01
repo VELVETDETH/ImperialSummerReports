@@ -1,0 +1,93 @@
+
+\subsection{MaxJ SpMV Implementation(Week 5, 6)}
+
+Compressed Sparse Row(CSR) is a famous sparse matrix storage method, it pull all the non zeros to the left of their own row, and store their original column index before they have been aligned. I'm building my SpMV algorithm based on this format. 
+
+\subsubsection{CSRP format introduction}
+In order to reduce complex control logic which could slow down the processing and introduce bugs, there'll be \textbf{padding} zeros at the end of each row, in order to make those rows, which will be processed together, have the same number of elements to calculate(although there'll be some useless zeros). That's the idea about CSRP format.
+
+\subsubsection{Redundancy formalization}
+
+If we align all our rows to the row with maximal number of nonzeros, then we could imagine there'll be lots of redundancy. As we will process only a small number of rows at the same time(number of pipes), we could just align rows to the longest row in each \textbf{processing group}.
+
+Let's formalize this description: If we have N rows for one sparse matrix, and for row $i$ it has $L_i$ number of non zeros. And if we group all these rows by $R$, which is the number of pipes for our design, then all these $R$ rows in one group will be calculated together. So we could devise this formula:
+
+The lower bound of our \textbf{redundant} calculation cycles will be:
+\begin{equation}
+Redundant\ cycles = \sum_{i}^{N/R} R \times \max_{j}^{R} L_{i\times R + j} - \sum_{i}^{N} L_i
+\end{equation}
+
+\subsubsection{Redundancy Optimization}
+
+If we transform formula (1) to this form:
+
+\begin{equation}
+Redundant\ cycles = \sum_{i}^{N/R} (R \times \max_{j}^{R} L_{i\times R + j} - \sum_{j}^{R} L_{i \times R + j})
+\end{equation}
+
+So here's a heuristic rule: we need to make sure there's no such case, that a very long row and several short rows coexist in one group. According to this idea, we could simply do a \textbf{sorting} on the rows by their length(which is a greedy algorithm). Is this really the best solution? We could easily prove it. 
+
+Imagine that we have $N/R$ "buckets", each bucket could contain $R$ rows. And now we need to put rows inside those buckets. We suppose that the best solution is put rows one by one in the sorted sequence, which means that the rows in the first group will be the rows with top $R$ number of non zeros.
+
+If there's a better solution than this one, then it should have swapped some of its elements. If we swap 2 rows between 2 groups, then it will increase redundancy in both groups.
+
+\subsubsection{Performance}
+
+I've tested this format with different $R$ value, and 2 extreme sparse matrix format: dense and triagle. The following features have been discovered:
+\begin{enumerate}
+\item The maximal performance I could get is by using design with $R$ equals to 32, and for dense matrix, GFlops is 0.28, for triangle matrix, it's 0.22.
+\item With larger $R$ value, the performance increase at first, and the fall down.
+\item If $R$ is larger, then redundancy will be larger.
+\end{enumerate}
+
+More detailed test and report will be attached once I've finished the final version.
+
+\subsection{Ruby Multi-Pumping Implementation(Week 5, 6)}
+
+In this section I'm going to make a summary about current progress on Ruby multi-pumping. 
+
+\subsubsection{Ruby serialization primitives}
+
+If we want to implement multi-pumping in Ruby, the first thing we must specify is: how could we have different clock rate in Ruby? The basic primitive about clock rate changing is \texttt{pdsr} and \texttt{sdpr}. The first one will change a n length list to n cycles of one element output, which will slow down the clock rate to 1/n. The \texttt{sdpr} will perform reversely.
+
+\subsubsection{Perspectives}
+
+Just take one simple example. If we want to multi pump +1 operation, and as inc(which is +1) has only 1 input and 1 output, then we could simply decide that the input for multi pumped inc is <x, y>, a 2-list. 
+
+Here're 2 different approach:
+\begin{enumerate}
+\item \textbf{Single kernel}: we just have one kernel which runs at 2x clock rate, and 2 input streams has interleaved, 1x clock rate input.
+\item \textbf{Multi kernel}: we run the kernel at 2x clock rate, but the input stream will run at 1x clock rate.
+\end{enumerate}
+
+Here's an example, for the single kernel approach, the input would be like: $\mathtt{<x_0,\_>, <\_,y_0>,<x_1,\_>,<\_,y_1>,...}$. Please notice that this stream runs at 2x clock rate. For the second approach, we will have $\mathtt{<x_0,y_0>,<x_1,y_1>,...}$ as input stream, and this stream will run at 1x clock rate.
+
+The first one is simple but not so general. The second one is more accurate and harder to implement, especially for Ruby to MaxJ translation, as we need to generate manager and kernel at the same time.
+
+\subsubsection{Implementation}
+
+Here I'll introduce the solution for the second approach, which will be the test case of our Ruby to MaxJ translation function.
+
+First we need to change the clock rate of input, which could be implemented by using \texttt{pdsr 2}. And then, do inc for each element. At last, use \texttt{sdpr 2} to bundle 2 output as 1.
+
+Here's a single line of code: \lstinline{current = pdsr 2; inc; sdpr 2.}
+
+\subsection{Ruby cyclic loop(Week 5, 6)}
+
+This part is about fixing the bug of cyclic loop in Ruby.
+
+\subsubsection{Problem: MaxCompiler auto-pipelining}
+
+For those DSP components in MaxJ, they will be automaticlly pipelined by MaxCompiler. And if we do some cyclic loop with just one offset, then this circuit is faulty as we try to get a result which is currently in the pipeline.
+
+And if we generate the MaxJ code for \lstinline{current = loop (add; DI 0; fork).}, then we will have a cyclic loop with 1 offset.
+
+We could solve cyclic loop bug by using many solutions, but our approach is by setting the pipelining factor of this DSP to 0. We'll not have pipeline on this DSP then.
+
+\subsubsection{Solution}
+
+How could we know where exists the cyclic loop, and where to put our \texttt{push} and \texttt{pop} instructions? 
+
+For the first problem, we could detect cyclic loop by using the input and output node number of each ruby gate, generated by ruby compiler. If the output node number is less than one of the input nodes number, then there definitely exists a cyclic loop. This feature is geranteed by Ruby compiler.
+
+For the next problem, just insert push and pop before and after the calculation part.
