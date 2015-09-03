@@ -9,6 +9,7 @@
 	language=Java,
 	basicstyle=\footnotesize\ttfamily,
 }  
+\usepackage{amsmath}
 
 \begin{document}
 
@@ -29,9 +30,67 @@ This is the 7th week of my summer research, and this report will contain mainly 
 
 \section{Week7: BCSR and Multi-pumped Implementation}
 
-\subsection{BCSR Description}
+\subsection{What is BCSR?}
+BCSR is a sparse matrix format which is based on well-known CSR format. It's basic element is little block of non-zeros, just like cutting CSR to little blocks. Each block has a shape of $r \times c$, where r and c's value will not be so large. 
+
+The BCSR format contains 2 main procedures, one is converting, which will transform a traditional COO format to BCSR format storage. The other one is computing, which will do computation on BCSR format.
+
+\subsubsection{Convert}
+The convert procedure will act like this, for example here's a sparse matrix A:
+\[
+A = 
+\begin{bmatrix}
+	a & 0 & b & c \\
+	d & e & f & 0 \\
+	0 & 0 & 0 & g \\
+	0 & h & i & 0
+\end{bmatrix}
+\]
+
+If it's a CSR format, the final result would be:
+\[
+A_{csr} = 
+\begin{bmatrix}
+	a & b & c \\
+	d & e & f \\
+	g \\
+	h & i
+\end{bmatrix}
+\]
+
+And for a BCSR format, the result would be:
+\[
+A_{bcsr} =
+\begin{bmatrix}
+	a & b\\
+	d & e
+\end{bmatrix}
+,
+\begin{bmatrix}
+	c & 0\\
+	f & 0
+\end{bmatrix}
+,
+\begin{bmatrix}
+	g & 0\\
+	h & i
+\end{bmatrix}
+\]
+
+\subsubsection{Compute}
+
+
+\subsection{Why choose BCSR on FPGA?}
+
+\subsection{BCSR Implementation}
 
 \subsection{BCSR Performance}
+
+Let's check out the maximal performance we could get if this design is IO-bound. If the PCIe bandwidth is 2GB/s, and we'll input 2 32-bits data, one for index, the other one for value, for each non zero. So we could process data per second:
+$$ \text{Non zero per second} = \frac{2(GB/s)}{2\times4(Byte)} = 0.25(G/s) $$
+
+And for each non zero, we will have 2 floating point operations(adder and multiplier), so the maximal GFlops we could get is:
+$$ \text{GFlops} = 0.25 (G/s) \times 2(Flop) = 0.5 $$
 
 \subsection{Multi-pumped BCSR design}
 
