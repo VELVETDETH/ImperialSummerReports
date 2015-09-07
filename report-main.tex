@@ -1,42 +1,163 @@
-\documentclass[a4paper, 10pt]{article}
+\documentclass[a4paper, 10pt]{report}
 
+\usepackage{url}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+
+\usepackage{graphicx}
+\usepackage[a4paper]{geometry}
 \usepackage{fontspec}
-\setmainfont{Lucida Bright}
+\setromanfont{Lucida Bright}
+\setsansfont{Lucida Sans}
 \setmonofont{Lucida Sans Typewriter}
-
 \usepackage{listings}
 \lstset{
 	language=Java,
 	basicstyle=\footnotesize\ttfamily,
+	frame=single,
+	tabsize=2,
+	numbers=left
 }  
 \usepackage{amsmath}
+\usepackage[toc,page]{appendix}
+\usepackage{enumitem}
+\setlist[enumerate]{itemsep=0mm}
 
 \begin{document}
 
-\title{Summer Research Reports}
+\title{Imperial Summer Research Report}
 \author{Vincent Zhao\\
 		\texttt{vincentzhaorz@gmail.com}}
 \maketitle
 
 \begin{abstract}
-This is the 7th week of my summer research, and this report will contain mainly what I've done in the past 2 weeks, including MaxJ SpMV inplementation, Ruby multipumping implementation, and some bug fix in Ruby compiler.
+This research report contains both general and detailed explanation about the research project for this summer. It will start from multi-pumping, a technique which could save design resource usage without affecting the speed. And illustrate several designs which are based on, or be optimized by multi-pumping. SpMV is the most important one, it has much more aspects than those pure multi-pumping work, and it will be described in detail. At last, there's an approach to do multi-pumping by using Ruby, an HDL language which is quite simple and precise. I have finished several revision on Ruby compiler, and the work which makes the compiler to have the ability to translate Ruby into multiple kernel MaxJ code is interesting both in software algorithm and hardware design.
 \end{abstract}
 \newpage
 
 \tableofcontents
 
+\chapter{Multi-Pumping}
+
+About multi-pumping, the details have been described in \cite{Canis:2013}. My work is mainly focusing on how to utilize multi-pumping technique on Maxeler platform, with MaxJ HLS language. 
+
+% Here I should describe what is the multi-pumping problem, from it's origin
+\section{Background} 
+Multi-pumping is a technique which could reduce the resource usage of a design, and in most cases, with nearly no speed affected. Multi-pumping is a problem originated from resouce sharing problem, which is mainly focusing on how to use only part of the previous resource usage without affecting the performance. And the way to solve this problem is highly dependent on scheduling, we need to schedule which operations should cooperate on one single resource. But it should be quite hard to get good resource sharing result from pure scheduling method as it's an NP-hard problem, and there're many heuristic method to optimize the algorithm's time complexity. 
+
+The basic idea of multi-pumping is to run 2 or more operations on one circuit component, with faster clock rate. For example, if we want to do 2 multiplications in one clock cycle, without multi-pumping, we need to use 2 multipliers for one cycle. But now we could run one multiplier at 2x clock rate, and obviously, this multiplier could handle 2 multiplications. Despite of this, we 
+need one more component: multiplexer, to steer different inputs to the multiplier in different clock cycle. In the following figure, the 2x rate clock signal will be transferred to the multiplexer, and in different clock cycle, the input will be steered differenly. 
+
+\begin{figure}[h!]
+  \caption{A multi-pumped square circuit.}
+  \centering
+    \includegraphics[width=0.5\textwidth]{square-mp}
+\end{figure}
+
+
+So multi-pumping could be regarded as an optimization to scheduling problem, from this point of view, we could implicitly schedule 2 or more operations to one resource unit, with double, triple or more clock cycles. And this is the approach from \cite{Canis:2013}, they revised their own LegUp, an open source HLS system, by changing its scheduling algorithm. Their scheduling algorithm will take care of MPM(multi-pumped multiplier)'s usage.
+
+But what if there's no way to change the underneath multi-pumping algorithm? And what if we want to do multi-pumping on much complexer components rather than simple multiplier? Like a read port of RAM, or a group of DSPs. These are my focusing points of my multi-pumping project, with Maxeler platform, I've devised a template to do multi-pumping \textit{explicitly} on code-level, without changing the HLS algorithm. Several experiments could support the correctness of this approach.
+ 
+\section{Brief introduction to MaxJ}
+MaxJ is a programming language which supports Maxeler HLS system. It's based on Java. It's initial idea is to build hardware by running these MaxJ java code and generate a hardware configuration file. Each MaxJ project could be devided into 2 parts, MaxJ's \textbf{Kernel} will generate the hardware, and the \textbf{Manager} will handle the connections and configurations among kernels and host CPUs. Here's a simple MaxJ code snippet:
+
+\begin{lstlisting}[caption=Non multi-pumped kernel example]
+public NoMPKernel extends Kernel {
+	NoMPKernel(KernelParameters params) {
+		super(params);
+		
+		DFEVar x0 = io.input("x0", dfeUInt(32));
+		DFEVar y0 = io.input("y0", dfeUInt(32));
+		DFEVar x1 = io.input("x1", dfeUInt(32));
+		DFEVar y1 = io.input("y1", dfeUInt(32));
+		
+		io.output("o1", x0 * y0, dfeUInt(32));
+		io.output("o1", x0 * y0, dfeUInt(32));
+	}
+}
+\end{lstlisting}
+
+This kernel will simply multiply 4 inputs: $x_0$ and $y_0$, $x_1$ and $y_1$. And outputs them to different output streams. Each tick this kernel will take 1 element from each stream. And the manager will handle input and output connected to this kernel. It's obvious that this kernel needs 2 multipliers, as there're 2 \textit{asterisks} on line 10 and line 11.
+
+\begin{figure}[h!]
+  \caption{DFE architecture}
+  \centering
+    \includegraphics[width=0.5\textwidth]{dfe-arch}
+\end{figure}
+
+More precisely, the generated output of MaxJ is called DataFlow Engine(DFE, see Figure 1.2), which take inputs and outputs as streams, and process them in a dataflow pattern. Kernels that generated could be regared as processing units in the dataflow, and manager handles how the dataflow connected to each other. MaxJ generate a configuration file of Maxeler DFE which is called Maxfile, which could be used to generate interface between host CPU and DFE, and set up bitstreams on FPGA hardware.
+
+In the next sections, we'll focus on 1 problem: how could we transform a non multi-pumped kernel code in MaxJ, to a multi-pumped one? It seems not so hard at first glance, but there do have some tricky details we need to take care of. And by using the methodology I've devised and illustrated later, we could build multi-pumping project in the code level systematically
+
+\section{Multi-pumping MaxJ methodology}
+There're 3 steps to transforma non multi-pumped kernel to a multi-pumped one:
+\begin{enumerate}
+\item \textbf{Split kernel by clock rate}: we put components with different clock rate into different kernels.
+\item \textbf{Steer inputs and outputs}: In kernels with faster clock rate, we need to steer input data in different clock cycles.
+\item \textbf{Configure manager}: Including clock frequency configuration and kernel connection details.
+\end{enumerate}
+
+\subsection{Split kernel by clock rate}
+In order to write Multi-pumping code explicitly, you need to assign different clock rate for different components. And according to MaxJ's convention and restriction, one kernel could only have one clock rate, which could be set in manager. If you have an original MaxJ design which only contains one kernel, the first thing you need to do to multi-pump it is splitting it into multiple kernels, and different kernel has different clock rate.
+
+We could describe our multi-pumping design in a DFE style(Figure 1.3). There're several 1x clock rate kernel handles slow operations, and take or push input to 2x clock rate kernel. This 2x clock rate kernel could have contained many DSPs, or some BRAMs with read or write ports, or some other fast components.
+
+\begin{figure}[h!]
+  \caption{DFE Multi-Pumping}
+  \centering
+    \includegraphics[width=0.5\textwidth]{dfe-mp-wireframe}
+\end{figure}
+
+\subsection{Steer inputs and outputs}
+We could do this in the manager level, by using \texttt{mux} method of manager class. However, it's more intuitive to do it in kernel, by using simple counter. We could revise our original Non multi-pumped code like this:
 \newpage
+\begin{lstlisting}[caption=Non multi-pumped kernel example]
+DFEVar counter = control.count.simpleCounter(2);
+
+DFEVar x0 = io.input("x0", dfeUInt(32), counter === 0);
+DFEVar y0 = io.input("y0", dfeUInt(32), counter === 0);
+DFEVar x1 = io.input("x1", dfeUInt(32), counter === 1);
+DFEVar y1 = io.input("y1", dfeUInt(32), counter === 1);
+
+io.output("o1", x0 * y0, dfeUInt(32), counter === 0);
+io.output("o1", x0 * y0, dfeUInt(32), counter === 1);
+....
+\end{lstlisting}
 
 
-\section{Week7: BCSR and Multi-pumped Implementation}
+Here \texttt{===} could be regarded as "take value and compare with". For the counter, it will count from 0 to 1 and loop back to 0. So it's equivilant to use a multiplexer which take clock signal as input. And the output will also be controlled by this counter value.
 
-\subsection{What is BCSR?}
-BCSR is a sparse matrix format which is based on well-known CSR format. It's basic element is little block of non-zeros, just like cutting CSR to little blocks. Each block has a shape of $r \times c$, where r and c's value will not be so large. 
+\subsection{Configure manager}
+The most important thing to configure in manager is the clock rate. Under MaxJ's context, all the clock rate will be set only for stream, and the kernel clock rate could be derived from its in/out stream clock setting. For example, if the input stream of one kernel is 100MHz, then this kernel will run as 100MHz. It follows the dataflow nature of Maxeler DFE platform.
 
-The BCSR format contains 2 main procedures, one is converting, which will transform a traditional COO format to BCSR format storage. The other one is computing, which will do computation on BCSR format.
+And also, currently there's no way to specify ratio timing constraints, such as one stream is 2 times faster than the other stream, so we need to set clock value explicitly: global stream is 100MHz and the multi-pumped kernels' stream will be 100n MHz.
 
-\subsubsection{Convert}
-The convert procedure will act like this, for example here's a sparse matrix A:
+\section{Experimental Study}
+Their are 2 main studies of multi-pumped MaxJ code: One is called \textit{inner square product}, which will do $x_i^2 \times y_i^2$ for 2 input streams, the other one is called \textit{window summation}, which calculates summation of a window of array, and the array's value will be gathered from ROM. The latter one could be written in:
+
+$$Sum = \sum_{i=0}^W rom[index[i]] $$
+
+Where $W$ is the window width, and $index$ is the input stream which contains address of $rom$ to read. The code of these 2 project could be referenced from this repository \footnote{Github repository folder: \url{https://goo.gl/uxJ9xO}}, and the experimental data has also be included there.
+
+For the first design, it's focusing on integrating kernel with many DSPs to one multi-pumped kernel. And for the second one, it shows a noval implementation of multi-pumping on ROM read, which could save a lot of memory space on board as one copy of BRAM could only support 2 read ports at the same time. With multi-pumping, we could do 4, 8 and more(although this may not be a good idea) read ports in one tick. In this figure, the multi-pumped version(C=2) has nearly half of the BRAM resource usage than non multi-pumped one(C=1), and the frequecies are nearly the same.
+
+\begin{figure}[h!]
+  \caption{ROM Read Port Multi-Pumping}
+  \centering
+    \includegraphics[width=1.0\textwidth]{window-summation}
+\end{figure}
+
+\section{Conclusion}
+Multi-pumping as a resource sharing technique, could be supported in HLS system originally, and also it has been discovered that in code-level we could also use multi-pumping to save space harmlessly. The methodology about implementing multi-pumping on MaxJ could serve as code template and it's possible to use this template to multi-pump any kinds of "faster" components. It has been proved that kernel with multiple DSPs and ROM read ports could be multi-pumped seamlessly.
+
+In the next chapter, I will mention this multi-pumping practice on SpMV, a much complexer problem then these 2 examples, about how could we find the resource bottleneck and how to reduce them by using multi-pumping. In the last chapter, this multi-pumping technique will be described and implemented in 2 simple serialization primitives, in Ruby HDL programming language. And the most important part is we could generate practical multi-pumped MaxJ code from this \textit{theoretical} HDL language.
+
+\chapter{SpMV}
+The focus of this SpMV project is not to provide the fastest SpMV implementation for some specific purpose, like what most other SpMV papers do. Here this project will have a general purpose implementation, which could handle most sparse matrix cases, with pretty good performance(May not be fastest though). The format of sparse matrix that I choose to use is called Blocked Compress Sparse Row(BCSR), which generates blocks upon CSR format. This chapter I'll first describe what is BCSR format and my MaxJ implementation of this format, experimental data will also be shown here. At last, we'll integrate our multi-pumping techniques with this SpMV implementation to see whether we could get better resource usage.
+
+\section{BCSR Format}
+This format could be generalized as a blocked version of CSR format. To generate a CSR representation of a sparse matrix, we could simply align the non zero elements to the left(or the other side if you wish). Here's an example sparse matrix, where those letters are representing non zero matrix elements.
 \[
 A = 
 \begin{bmatrix}
@@ -46,69 +167,148 @@ A =
 	0 & h & i & 0
 \end{bmatrix}
 \]
-
-If it's a CSR format, the final result would be:
-\[
-A_{csr} = 
+And if we want to build a CSR represenation of this matrix, we could just pull all the non zero elements to the left. 
+$$A_{csr} = 
 \begin{bmatrix}
 	a & b & c \\
 	d & e & f \\
 	g \\
 	h & i
 \end{bmatrix}
-\]
-
-And for a BCSR format, the result would be:
-\[
-A_{bcsr} =
+$$
+It depends on yourself about how to store the CSR format, basically, it's just a 2 dimensional array, with each element as a pair of value and original column index. For the previous CSR example, the storage format could be: 
+$$
 \begin{bmatrix}
-	a & b\\
-	d & e
+	(a,0) & (b,2) & (c,3) \\
+	(d,0) & (e,1) & (f,2) \\
+	(g,3) \\
+	(h,1) & (i,2) \\
 \end{bmatrix}
-,
+$$
+
+These format works for many different matrices, and platforms, but its main deflect is that it will not be padded, and this is obviously not good for parallel processing units, especially our DFE design. So we choose to use BCSR format, which will pad zeros to each row, to align and group non zeros and padding zeros to blocks. The BCSR format with 2X2 block of the previous matrix is:
+
+$$
 \begin{bmatrix}
-	c & 0\\
-	f & 0
+	(a,0) & (b,2) & (c,3) & (0,0)\\
+	(d,0) & (e,1) & (f,2) & (0,0)\\
+	(g,3) & (0,0) \\
+	(h,1) & (i,2) \\
 \end{bmatrix}
-,
-\begin{bmatrix}
-	g & 0\\
-	h & i
-\end{bmatrix}
-\]
+$$
 
-\subsubsection{Compute}
+With this format, we could simply pass one block to DFE in one tick. The further question is, how could we process $R\times C$ shape block in one tick?
 
+\section{BCSR on FPGA}
 
-\subsection{Why choose BCSR on FPGA?}
+The first thing we must specify is about where to put the data. Although Maxeler board has a lot of BRAMs to use, it will still be insufficient if we simply put all the storage on board. The simplest approach is to put vector value on BRAMs, and set input streams to take BCSR's index and value streams. So for each tick, each input stream will take $R\times C$ number of elements if the block has been configured as $R\times C$ shape.
 
-\subsection{BCSR Implementation}
+\begin{figure}[h!]
+  \caption{BCSR one block computation}
+  \centering
+    \includegraphics[width=0.5\textwidth]{bcsr}
+\end{figure}
 
-\subsection{BCSR Performance}
+\subsection{3 steps calculation}
+For each tick, the BCSR implementation will mainly do 3 things:
+\begin{enumerate}
+\item \textbf{Read from ROM}: For each row in the block, we use original column index to read value from vector, which has been stored on ROM.
+\item \textbf{Multiply}: After read a size $C$ vector from ROM, we do multiplication between this little vector and the value from the row we're calculating. You could view this as the first step of dot product.
+\item \textbf{Summation}: Then we do the second step of dot product, sum up the result vector we get from the previous step.
+\end{enumerate}
 
-Let's check out the maximal performance we could get if this design is IO-bound. If the PCIe bandwidth is 2GB/s, and we'll input 2 32-bits data, one for index, the other one for value, for each non zero. So we could process data per second:
-$$ \text{Non zero per second} = \frac{2(GB/s)}{2\times4(Byte)} = 0.25(G/s) $$
+If we have multiple rows to calculate in one tick, then we apply these 3 steps in parallel. And here's a wireframe of 4 X 4 block configuration.
 
-And for each non zero, we will have 2 floating point operations(adder and multiplier), so the maximal GFlops we could get is:
-$$ \text{GFlops} = 0.25 (G/s) \times 2(Flop) = 0.5 $$
+Of course, we could describe this design in MaxJ kernel code(Listing 2.1). In this code snippet, the function \lstinline{summationTree} will generate a tree-like summation circuit, which has $log_2(C)-1$ level of adders, and in level $i = 0...log_2(C)-1$ will contains $2^i$ adders.
 
-\subsection{Multi-pumped BCSR design}
+\begin{lstlisting}[caption=BCSR kernel]
+for (int i = 0; i < R; i ++) {
+	// gather	
+	for (int j = 0; j < C; j++)	
+		vectorValue[j] <== ROM.read(index[i*R+j]);
+	// multiply
+	for (int j = 0; j < C; j++)
+		productValue[j] <== vectorValue[i] * rowValue[j];
+	// summation
+	result[i] <== summationTree(productValue, 0, C-1);
+}
+\end{lstlisting}
 
-Referring to the BCSR format, we will calculate multiple multiplication in one single tick, which is a brillliant feature to be multi-pumped. But due to the constraints of MaxCompiler, we need to have multiple kernel blocks now, as we could only assign one universal clock rate to each kernel. We could divide this multi-pumped BCSR design into 3 parts:
+And each line could have multiple blocks, we need to sum up the \lstinline{temp_vec} to get the final result for each row, which is initially a reduce add operation. 
 
-\begin{description}
-\item[Gather] For each pipe, we need to gather the input vector and value vector. Input vector means the values in the vector parameter, read from ROM. 
-\item[Multiply] We send those input and value vectors to this multiply part, and this part runs at 2x clock rate, which is the computation core of multi-pumping design.
-\item[Sum] Will take result from multi-pumping multipliers and use summation tree to sum them up. It will also take a \texttt{start} stream to denote whether the current calculated block is the start of each group.
-\end{description}
+\subsection{Problems}
 
-\input{archive/week7-serial-primitives}
+This BCSR design looks good, but it has several deflects: First, it can't handle large sparse matrix computation. As large matrix has large column size, which means we need to store a large amount of vector data inside ROM. And also, as we need to do multiple read in one tick for each block($R\times C$ times), we need to have $\frac{R\times C}{2}$ number of ROM copies as each ROM could only support 2 read ports in one tick. That's a huge amount of data and there's no sufficient place for these BRAMs. And also, as we're streaming matrix data in, the maximal bandwidth of PCIe will restrict our performance as our design could always process data elements faster.
 
-\newpage
+\begin{figure}[h!]
+  \caption{BCSR new architecture}
+  \centering
+    \includegraphics[width=0.5\textwidth]{bcsr-opt}
+\end{figure}
 
-\section{Reports Archive}
-\input{archive/week3-report.tex} \newpage
-\input{archive/week4-report.tex} \newpage
-\input{archive/week5n6-report.tex} \newpage
-   
+So the main problem is about storage and bandwidth, and the major solution to this problem is by using LMem, a outside DRAM for DFE, which has large storage and connect with DFE with 20x more bandwidth. As LMem do not support random access, which is quite essential for ROM read of SpMV, we use an on-board BRAM cache to handle random access(Although this need more reordering on matrix). Here's the optimized architecture of our BCSR design(Figure 2.2).
+
+\subsection{Multi-Pumping optimization}
+If you take a closer look at our 3 steps BCSR calculation, you could find out that there're 2 steps that match our multi-pumping examples: one is \textbf{gather}, where we could multi-pump the ROM read, and \textbf{multiply}, those DSPs could be multi-pumped. Our BCSR SpMV will benefits a lot from this: It uses many ROM to do multiple reading and many DSPs to do dot production, with multi-pumping we could highly reduce those resource usage. And also, the \textbf{summation} operation is quite slow if we apply block configuration with large C value, which means our multi-pumped components could run at more than 2x clock rate of that slow clock rate. Detailed experimental data will be listed in the next section.
+
+\subsection{Experimental Study}
+
+\subsection{Conclusion}
+Our BCSR SpMV implementation could handle most of the sparse matrix cases, it do not depends on the distribution of number of non zeros in each row, and with the help of LMem and multi-pumping, we could store very large vector for calculation. Multi-pumping here not only reduces the DSP usage, but also reduce a large amount of BRAM usage, which is the resource bottleneck of our SpMV design. 
+
+The way we apply multi-pumping on a non multi-pumped SpMV design suggests that our multi-pumping methodology will work perfectly, and could adapt to many different circumstances.
+
+\chapter{Ruby}
+
+Ruby is a highly abstract HDL language, which could write a very complex design in quite a few lines. Comparing to MaxJ, ruby code is much simpler and could help programmer concentrate on the design itself, without distracting on allocating memory, configuring and connecting input and output streams. But ruby don't have a powerful toolchain like MaxJ, which could use single command to deploy your hardware design on Maxeler FPGA board. So it's a good idea to combine these 2 languages together, with Ruby's simple syntax and MaxJ's toolchain. We could achieve this simply by translating Ruby code into MaxJ code, and do the compilation.
+
+But as Ruby is highly abstract, there's no explicit configurations in the source code file, and Ruby itself doesn't contain optimization of the design, like what MaxJ do underneath. There'll be a conflict when MaxJ do pipelining implicitly, and Ruby wants to do cyclic loop on the pipelined operator. This problem will be covered later, and the solution will also be listed.
+
+Ruby provides serialization methods, which could convert clock rate between the input and output ports of wires. If we simply translate one Ruby file into one MaxJ kernel file, then there'll be problem, as we have mentioned: MaxJ do not support multiple clock configuration on one kernel. And Ruby doesn't have kernel splitting primitives, we need to do this automatically. There's an algorithm that has been implemented to do this when translating Ruby code to MaxJ, the main idea is to split by clock rate changing, especially by \texttt{pdsr} and \texttt{sdpr} primitives. 
+
+We could also use these 2 primitives to implement multi-pumping in Ruby. There'll be an example about how to do this in Ruby, and an example of translated MaxJ kernels and manager files could prove that our kernel splitting algorithm works.
+
+\section{Cyclic loop problem}
+
+\subsection{Background}
+For those DSP components in MaxJ, they will be automaticlly pipelined by MaxCompiler. And if we do some cyclic loop with just one offset, then this circuit is faulty as we try to get a result which is currently in the pipeline.
+
+And if we generate the MaxJ code for \lstinline{current = loop (add; DI 0; fork).}, then we will have a cyclic loop with 1 offset. There'll be problem if this \texttt{add} has been pipelined. The 1 offset before result we get are still in the pipeline when we get it.
+
+Could we solve this problem without affecting the pipelining optimization? The answer is no. It's quite hard to generate a C-Slowed MaxJ code directly from Ruby, and without C-Slowing, the generated code will be really slow, as we are running the code with $\frac{1}{pipeline\ depth}$.
+
+We could solve cyclic loop bug by using many solutions, but our approach is by setting the pipelining factor of this DSP to 0. We'll not have pipeline on this DSP then.
+
+\subsection{Solution}
+
+How could we know where exists the cyclic loop, and where to put our \texttt{push} and \texttt{pop} instructions? 
+
+For the first problem, we could detect cyclic loop by using the input and output node number of each ruby gate, generated by ruby compiler. If the output node number is less than one of the input nodes number, then there definitely exists a cyclic loop. This feature is geranteed by Ruby compiler.
+
+\subsection{Restriction}
+
+As I've mentioned before, this solution is far from perfect. We simply banned pipelining, and the direct result would be a tremendously low maximal frequency we could achieve, especially we want to do complex design.
+
+\section{Serialization primitives translation}
+
+\subsection{Background}
+
+\subsection{Kernel partition algorithm}
+
+\subsection{Result and restriction}
+
+\section{Multi-Pumping in Ruby}
+
+\begin{appendices}
+\chapter{Weekly Report Archive}
+
+\input{archive/week3-report.tex} 	\newpage
+\input{archive/week4-report.tex} 	\newpage
+\input{archive/week5n6-report.tex} 	\newpage
+\input{archive/week7-report.tex} 	\newpage
+
+\end{appendices}
+
+\bibliography{report-bib}
+\bibliographystyle{acm}
 \end{document}

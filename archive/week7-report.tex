@@ -1,0 +1,95 @@
+
+\section{Report of Week 7}
+
+\subsection{What is BCSR?}
+BCSR is a sparse matrix format which is based on well-known CSR format. It's basic element is little block of non-zeros, just like cutting CSR to little blocks. Each block has a shape of $r \times c$, where r and c's value will not be so large. 
+
+The BCSR format contains 2 main procedures, one is converting, which will transform a traditional COO format to BCSR format storage. The other one is computing, which will do computation on BCSR format.
+
+\subsubsection{Convert}
+The convert procedure will act like this, for example here's a sparse matrix A:
+\[
+A = 
+\begin{bmatrix}
+	a & 0 & b & c \\
+	d & e & f & 0 \\
+	0 & 0 & 0 & g \\
+	0 & h & i & 0
+\end{bmatrix}
+\]
+
+If it's a CSR format, the final result would be:
+\[
+A_{csr} = 
+\begin{bmatrix}
+	a & b & c \\
+	d & e & f \\
+	g \\
+	h & i
+\end{bmatrix}
+\]
+
+And for a BCSR format, the result would be:
+\[
+A_{bcsr} =
+\begin{bmatrix}
+	a & b\\
+	d & e
+\end{bmatrix}
+,
+\begin{bmatrix}
+	c & 0\\
+	f & 0
+\end{bmatrix}
+,
+\begin{bmatrix}
+	g & 0\\
+	h & i
+\end{bmatrix}
+\]
+
+\subsection{BCSR Performance}
+
+Let's check out the maximal performance we could get if this design is IO-bound. If the PCIe bandwidth is 2GB/s, and we'll input 2 32-bits data, one for index, the other one for value, for each non zero. So we could process data per second:
+$$ \text{Non zero per second} = \frac{2(GB/s)}{2\times4(Byte)} = 0.25(G/s) $$
+
+And for each non zero, we will have 2 floating point operations(adder and multiplier), so the maximal GFlops we could get is:
+$$ \text{GFlops} = 0.25 (G/s) \times 2(Flop) = 0.5 $$
+
+\subsubsection{Multi-pumped BCSR design}
+
+Referring to the BCSR format, we will calculate multiple multiplication in one single tick, which is a brillliant feature to be multi-pumped. But due to the constraints of MaxCompiler, we need to have multiple kernel blocks now, as we could only assign one universal clock rate to each kernel. We could divide this multi-pumped BCSR design into 3 parts:
+
+\begin{description}
+\item[Gather] For each pipe, we need to gather the input vector and value vector. Input vector means the values in the vector parameter, read from ROM. 
+\item[Multiply] We send those input and value vectors to this multiply part, and this part runs at 2x clock rate, which is the computation core of multi-pumping design.
+\item[Sum] Will take result from multi-pumping multipliers and use summation tree to sum them up. It will also take a \texttt{start} stream to denote whether the current calculated block is the start of each group.
+\end{description}
+
+\subsection{Ruby serial primitives}
+
+This part of work is about how to compile Ruby serial primitives to MaxJ code, mainly \texttt{pdsr} and \texttt{sdpr}. 
+
+\subsubsection{\texttt{showGate} and Function Device}
+\texttt{showGate} is the core function to generate the MaxJ expression of a Ruby circuit. For instance, \texttt{add} primitive will be transformed to "+" by using \texttt{showGate}. But things will be different for \texttt{pdsr} and \texttt{sdpr}, as \texttt{showGate} currently could only support infix, eq and some other basic primitives, there's nothing like "function" has been supported, which will be quite useful to definie \texttt{pdsr} and \texttt{sdpr}.
+
+Briefly, my approach is:
+\begin{enumerate}
+\item Add a condition filter \texttt{isFunc} in \texttt{showGate}, to check whether the current device is a \textbf{function device}, which should be implemented like \texttt{func(t1, t2)} in MaxJ. 
+\item Append the builtin function definition backward in the kernel class definition. 
+\end{enumerate}
+
+\subsubsection{\texttt{pdsr} and \texttt{sdpr}}
+How to define these 2 primitives in MaxJ? The simplest way is using a combination of \textbf{counter} and \textbf{mutiplexer}, which should be \texttt{simpleCounter} and \texttt{mux} in MaxJ. A simple definition for \texttt{pdsr 2} is:
+
+\begin{lstlisting}
+private DFEVar pdsr2(DFEVar t0,DFEVar t1) {
+  DFEVar counter = control.count.simpleCounter(
+    			MathUtils.bitsToAddress(2));
+  return control.mux(counter, t0, t1);
+}
+\end{lstlisting}
+
+This snippet of code is auto-generated, and suit for different value of n in \texttt{pdsr n} expression.
+
+But for \texttt{sdpr}, things will be different, as no 2 or more number of output ports device will be supported in \texttt{printmax}, I think maybe it's better to optimize this by using \texttt{DFEVector}.

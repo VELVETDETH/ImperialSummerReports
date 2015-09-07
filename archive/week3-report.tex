@@ -1,10 +1,10 @@
-\subsection{Report of Week 3 (Aug 3rd, 2015)}
+\section{Report of Week 3 (Aug 3rd, 2015)}
 
 Basically I've finished running and testing the real hardware implementation of my previous SpMV design, and improved it by enabling large matrix calculation. Also, I've written a simple multi-pumped design by using MaxJ. This one has been checked about its accuracy and time frequency. 
 
-\subsubsection{SpMV Implementation}
+\subsection{SpMV Implementation}
 
-\paragraph{CSRP format} The format that I've devised and implemented could be called as CSRP (\textit{CSR format with Padding zeros}). This format enables multiple rows of elements to be calculated at the same time, and when those simultaneous caculated rows don't have the same number of non-zeros, this format will automatically add padding zeros to ensure the result is correct. 
+\subsubsection{CSRP format} The format that I've devised and implemented could be called as CSRP (\textit{CSR format with Padding zeros}). This format enables multiple rows of elements to be calculated at the same time, and when those simultaneous caculated rows don't have the same number of non-zeros, this format will automatically add padding zeros to ensure the result is correct. 
 
 The main advantage of this format is its simplicity in implementation, but it will also face these deflects:
 \begin{enumerate}
@@ -12,37 +12,37 @@ The main advantage of this format is its simplicity in implementation, but it wi
 \item \textit{Resource duplication}: We need to replicate same kind of resources to enable parallelized calculation. 
 \end{enumerate}
 
-\paragraph{Implementation} The implementation of CSRP format is quite simple. We set 2 input streams, one is for value and the other is for column index of each non-zero element. All these input streams are interleaved and zero-padded. Each of the calculation components has one a cyclic-loop which will sum the result for current row, and one ROM which stores the values of vector. We take Matrix Market Format of matrix as input, and generate interleaved data from the original data. 
+\subsubsection{Implementation} The implementation of CSRP format is quite simple. We set 2 input streams, one is for value and the other is for column index of each non-zero element. All these input streams are interleaved and zero-padded. Each of the calculation components has one a cyclic-loop which will sum the result for current row, and one ROM which stores the values of vector. We take Matrix Market Format of matrix as input, and generate interleaved data from the original data. 
 
-\paragraph{Optimization} The detailed statistics will be updated by next week, but here I'll list several ideas of optimization:
+\subsubsection{Optimization} The detailed statistics will be updated by next week, but here I'll list several ideas of optimization:
 \begin{enumerate}
 \item \textit{Reduce redundant calculation}: Currently the number of redundant calculation depends on the maximal number of non-zeros of all rows in the matrix. We could reorganize our output data and let number of padding zeros depend on the maximal number of non-zeros of all rows in each simultaneously calculated groups. After that, we could also reorder the matrix rows to get the best placement of rows into different groups, and get a globally optimizated result.
 \item \textit{Summation tree}: Current version of SpMV is based on a cyclic loop, which will sum the results for each row. A summation tree implementation should be better.
 \item \textit{Reduce resource usage}: We could do this by using dual-port of ROM, and if possible, using multi-pumping.
 \end{enumerate}
 
-\paragraph{TODO} 
+\subsubsection{TODO} 
 \begin{enumerate}
 \item Finish the fully implemented baseline by Thursday. Fully implemented means, it could take MMF matrix data as input, and has reasonable space of memory.
 \item Finish the first kind of optimization and the dual-port version by the end of this week.
 \item If possible, try a multi-pumped version. (Only after the first 2 tasks finished)
 \end{enumerate}
 
-\subsubsection{Multi-Pumping}
+\subsection{Multi-Pumping}
 
-\paragraph{Simple implementation} This simple implementation will do square on 2 input streams. Those input streams will be configured at 1x clock rate, and the inner multiplier will be configured at 2x clock rate. It could be implemented by using \texttt{ManagerClock} in MaxJ. The real hardware implementation has also been checked. The result is correct but the frequency is not accurate.
+\subsubsection{Simple implementation} This simple implementation will do square on 2 input streams. Those input streams will be configured at 1x clock rate, and the inner multiplier will be configured at 2x clock rate. It could be implemented by using \texttt{ManagerClock} in MaxJ. The real hardware implementation has also been checked. The result is correct but the frequency is not accurate.
 
-\paragraph{TODO}
+\subsubsection{TODO}
 \begin{enumerate}
 \item Finish checking this simple implementation. Must get a reasonable clock frequence.
 \item Finish a Ruby implementation of multi-pumping by Thursday. Also, generate its MaxJ code.
 \end{enumerate}
 
-\subsubsection{Ruby Compiler}
+\subsection{Ruby Compiler}
 
 I haven't checked the compiler last week, but I'll start it as soon as possible. Basically, I should first use ruby to do some basic design, compile it into MaxJ and run it. After that, try to do some loop in Ruby. And test its MaxJ result (Which may not be correct).
 
-\paragraph{TODO}
+\subsubsection{TODO}
 \begin{enumerate}
 \item \textit{Loops in Ruby}: Test loops in Ruby, including acyclic loops and cyclic loops. Simulate them and check its generated MaxJ code.
 \end{enumerate}

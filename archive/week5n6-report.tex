@@ -1,5 +1,6 @@
 
-\subsection{MaxJ SpMV Implementation(Week 5, 6)}
+\section{Report of Week 5 and 6}
+\subsection{MaxJ SpMV Implementation}
 
 Compressed Sparse Row(CSR) is a famous sparse matrix storage method, it pull all the non zeros to the left of their own row, and store their original column index before they have been aligned. I'm building my SpMV algorithm based on this format. 
 
@@ -42,7 +43,7 @@ I've tested this format with different $R$ value, and 2 extreme sparse matrix fo
 
 More detailed test and report will be attached once I've finished the final version.
 
-\subsection{Ruby Multi-Pumping Implementation(Week 5, 6)}
+\subsection{Ruby Multi-Pumping Implementation}
 
 In this section I'm going to make a summary about current progress on Ruby multi-pumping. 
 
@@ -72,7 +73,7 @@ First we need to change the clock rate of input, which could be implemented by u
 
 Here's a single line of code: \lstinline{current = pdsr 2; inc; sdpr 2.}
 
-\subsection{Ruby cyclic loop(Week 5, 6)}
+\subsection{Ruby cyclic loop}
 
 This part is about fixing the bug of cyclic loop in Ruby.
 
