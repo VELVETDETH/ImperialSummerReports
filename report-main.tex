@@ -3,13 +3,17 @@
 \usepackage{url}
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode}
+\usepackage[english]{babel}
+\usepackage[utf8x]{inputenc}
 
 \usepackage{graphicx}
 \usepackage[a4paper]{geometry}
-\usepackage{fontspec}
-\setromanfont{Lucida Bright}
-\setsansfont{Lucida Sans}
-\setmonofont{Lucida Sans Typewriter}
+\usepackage{palatino}
+
+%\usepackage{fontspec}
+%\setromanfont{Times New Roman}
+%\setsansfont{Lucida Sans}
+%\setmonofont{Consolas}
 \usepackage{listings}
 \lstset{
 	language=Java,
@@ -18,6 +22,8 @@
 	tabsize=2,
 	numbers=left
 }  
+\usepackage[T1]{fontenc}
+\usepackage[scaled]{beramono}
 \usepackage{amsmath}
 \usepackage[toc,page]{appendix}
 \usepackage{enumitem}
@@ -25,10 +31,45 @@
 
 \begin{document}
 
-\title{Imperial Summer Research Report}
-\author{Vincent Zhao\\
-		\texttt{vincentzhaorz@gmail.com}}
-\maketitle
+\begin{titlepage}
+
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}} 
+\center
+ 
+\textsc{\LARGE Imperial College London}\\[1.5cm] % Name of your university/college
+\textsc{\Large Department of Computing}\\[0.5cm] % Major heading such as course name
+\textsc{\large Summer Research Project}\\[0.5cm] % Minor heading such as course title
+
+\HRule \\[0.4cm]
+{ \LARGE 
+  \textbf{Multi-Pumping on Maxeler Platform} \\[0.2cm]
+  \large A General Study on Multi-Pumping\\ Implementation, Application and Compiler }\\[0.3cm] % Title of your document
+\HRule \\[1.5cm]
+ 
+\begin{minipage}[t]{0.4\textwidth}
+\begin{flushleft}
+\textbf{Author:}\\
+Vincent \textsc{Zhao}\\ % Your name
+\emph{Peking University}
+\end{flushleft}
+\vfill
+\end{minipage}
+~
+\begin{minipage}[t]{0.4\textwidth}
+\begin{flushright}
+\textbf{Supervisor:} \\
+Dr. Timothy \textsc{Todman} \\% Supervisor's Name
+\emph{Imperial College London} \\[0.2cm]
+Prof. Wayne \textsc{Luk}\\
+\emph{Imperial College London}
+\end{flushright}
+\vfill
+\end{minipage}\\[2cm]
+
+{\large \today}\\[2cm]
+
+\vfill % Fill the rest of the page with whitespace
+\end{titlepage}
 
 \begin{abstract}
 This research report contains both general and detailed explanation about the research project for this summer. It will start from multi-pumping, a technique which could save design resource usage without affecting the speed. And illustrate several designs which are based on, or be optimized by multi-pumping. SpMV is the most important one, it has much more aspects than those pure multi-pumping work, and it will be described in detail. At last, there's an approach to do multi-pumping by using Ruby, an HDL language which is quite simple and precise. I have finished several revision on Ruby compiler, and the work which makes the compiler to have the ability to translate Ruby into multiple kernel MaxJ code is interesting both in software algorithm and hardware design.
@@ -51,7 +92,7 @@ need one more component: multiplexer, to steer different inputs to the multiplie
 \begin{figure}[h!]
   \caption{A multi-pumped square circuit.}
   \centering
-    \includegraphics[width=0.5\textwidth]{square-mp}
+    \includegraphics[width=0.7\textwidth]{square-mp}
 \end{figure}
 
 
@@ -62,7 +103,7 @@ But what if there's no way to change the underneath multi-pumping algorithm? And
 \section{Brief introduction to MaxJ}
 MaxJ is a programming language which supports Maxeler HLS system. It's based on Java. It's initial idea is to build hardware by running these MaxJ java code and generate a hardware configuration file. Each MaxJ project could be devided into 2 parts, MaxJ's \textbf{Kernel} will generate the hardware, and the \textbf{Manager} will handle the connections and configurations among kernels and host CPUs. Here's a simple MaxJ code snippet:
 
-\begin{lstlisting}[caption=Non multi-pumped kernel example]
+\begin{lstlisting}[caption=Non multi-pumped kernel example,float]
 public NoMPKernel extends Kernel {
 	NoMPKernel(KernelParameters params) {
 		super(params);
@@ -83,7 +124,7 @@ This kernel will simply multiply 4 inputs: $x_0$ and $y_0$, $x_1$ and $y_1$. And
 \begin{figure}[h!]
   \caption{DFE architecture}
   \centering
-    \includegraphics[width=0.5\textwidth]{dfe-arch}
+    \includegraphics[width=0.7\textwidth]{dfe-arch}
 \end{figure}
 
 More precisely, the generated output of MaxJ is called DataFlow Engine(DFE, see Figure 1.2), which take inputs and outputs as streams, and process them in a dataflow pattern. Kernels that generated could be regared as processing units in the dataflow, and manager handles how the dataflow connected to each other. MaxJ generate a configuration file of Maxeler DFE which is called Maxfile, which could be used to generate interface between host CPU and DFE, and set up bitstreams on FPGA hardware.
@@ -106,13 +147,13 @@ We could describe our multi-pumping design in a DFE style(Figure 1.3). There're 
 \begin{figure}[h!]
   \caption{DFE Multi-Pumping}
   \centering
-    \includegraphics[width=0.5\textwidth]{dfe-mp-wireframe}
+    \includegraphics[width=0.8\textwidth]{dfe-mp-wireframe}
 \end{figure}
 
 \subsection{Steer inputs and outputs}
 We could do this in the manager level, by using \texttt{mux} method of manager class. However, it's more intuitive to do it in kernel, by using simple counter. We could revise our original Non multi-pumped code like this:
-\newpage
-\begin{lstlisting}[caption=Non multi-pumped kernel example]
+
+\begin{lstlisting}[caption=Non multi-pumped kernel example, float]
 DFEVar counter = control.count.simpleCounter(2);
 
 DFEVar x0 = io.input("x0", dfeUInt(32), counter === 0);
@@ -124,7 +165,6 @@ io.output("o1", x0 * y0, dfeUInt(32), counter === 0);
 io.output("o1", x0 * y0, dfeUInt(32), counter === 1);
 ....
 \end{lstlisting}
-
 
 Here \texttt{===} could be regarded as "take value and compare with". For the counter, it will count from 0 to 1 and loop back to 0. So it's equivilant to use a multiplexer which take clock signal as input. And the output will also be controlled by this counter value.
 
@@ -243,17 +283,53 @@ This BCSR design looks good, but it has several deflects: First, it can't handle
 \begin{figure}[h!]
   \caption{BCSR new architecture}
   \centering
-    \includegraphics[width=0.5\textwidth]{bcsr-opt}
+    \includegraphics[width=0.7\textwidth]{bcsr-opt}
 \end{figure}
 
 So the main problem is about storage and bandwidth, and the major solution to this problem is by using LMem, a outside DRAM for DFE, which has large storage and connect with DFE with 20x more bandwidth. As LMem do not support random access, which is quite essential for ROM read of SpMV, we use an on-board BRAM cache to handle random access(Although this need more reordering on matrix). Here's the optimized architecture of our BCSR design(Figure 2.2).
 
 \subsection{Multi-Pumping optimization}
-If you take a closer look at our 3 steps BCSR calculation, you could find out that there're 2 steps that match our multi-pumping examples: one is \textbf{gather}, where we could multi-pump the ROM read, and \textbf{multiply}, those DSPs could be multi-pumped. Our BCSR SpMV will benefits a lot from this: It uses many ROM to do multiple reading and many DSPs to do dot production, with multi-pumping we could highly reduce those resource usage. And also, the \textbf{summation} operation is quite slow if we apply block configuration with large C value, which means our multi-pumped components could run at more than 2x clock rate of that slow clock rate. Detailed experimental data will be listed in the next section.
+If you take a closer look at our 3 steps BCSR calculation, you could find out that there're 2 steps that match our multi-pumping examples: one is \textbf{gather}, where we could multi-pump the ROM read, and \textbf{multiply}, those DSPs could be multi-pumped. Our BCSR SpMV will benefits a lot from this: It uses many ROM to do multiple reading and many DSPs to do dot production, with multi-pumping we could highly reduce those resource usage. And also, the \textbf{summation} operation is quite slow if we apply block configuration with large C value, which means our multi-pumped components could run at more than 2x clock rate of that slow clock rate. 
 
-\subsection{Experimental Study}
+This part of work is still under evaluation, and may not be released until everything works fine.
 
-\subsection{Conclusion}
+\section{Experimental Study}
+
+Experiments on this SpMV application are focusing on two aspects: One is about the maximal speed we could get, and some discovery about different parameters' could affect the performance. The other one is on the resource usage of our multi-pumping application, mainly on DSPs usage, we try to find out whether the resource usage will be reduced by using our multi-pumping design.
+
+\subsection{Basic performance experiments}
+According to our algorithm and design, if there's no bandwidth limitation(or comparing to our speed, its much faster), then the performance should be estimated as:
+$$ \text{Estimated Frequency} = \text{Frequency} \times R \times C $$
+
+So if we use $R$ and $C$ with the same $R \times C$ value, then the performance shouldn't be different. We evaluate the performance with 3 different metrics, suppose the runtime for each non-zero element is $T$:
+\begin{enumerate}
+\item \textbf{Bandwidth}: Bandwidth is the number of bytes that has been transferred in one second. In our application, on BCSR non zero pair will take 6 bytes, as 4 bytes for float value and 2 bytes for \texttt{uint16\_t} type index.
+$$\text{Bandwidth} = \frac{6}{T}\times 10^{-6} (\text{MB/s})$$
+\item \textbf{GFlops}: The effective floating point operation number will be two for each non zero element, one is for adder, the other is for multiplier.
+$$\text{GFlops} = \frac{2}{T} \times 10^{-9} $$
+\item \textbf{Frequency}: This is the real frequency we get from runtime. It should be close to our estimated frequency, although there will be some interferer while calculating.
+$$\text{Frequency} = \frac{1}{T} \times 10^{-6} (\text{MHz})$$
+\end{enumerate}
+
+Here're the results we've got. We have tested 3 sets of $R\times C$ configurations: 16, 48 and 96. The reason we choose last 2 number is for the transfer between LMem and DFE(or CPU) should be divided by 384 bytes. And as C must be a number as power of 2, as the summation tree is a full binary tree, we need to fullfill every level. These data are based on several self-generated sparse matrices with number of columns as 8192 and total datasize equals to $8192^2$. We have generated dense matrices, triangle matrices, band matrices and random matrices. The performance result following are average results.
+
+\begin{figure}[h!]
+  \caption{BCSR LMem Performance}
+  \centering
+    \includegraphics[width=1.0\textwidth]{bcsr-lmem-perf}
+\end{figure}
+
+For the performance, we could reach a maximal GFlops around 8.6, and there's a sharp frequency drop when we tried to use $R\times C=96$, which might meet the boundary bandwidth of LMem to DFE. The resource usage looks quite reasonable: The DSP usage is highly related to the $R\times C$ value, and so does the BRAM usage.
+
+\subsection{Multi-Pumped BCSR SpMV}
+
+Currently we have only tested the $R=4$ and $C=4$ with double pumped configuration. The one without multi-pumping will use 32 multipliers for calculation while the multi-pumped will only use half of them. 
+
+\subsection{Others}
+
+Other experimental data are stored in a spreadsheet, which contains the studies of ROM optimization, LMem optimization and bandwidth optimization of our SpMV BCSR algorithm. And also it includes those data which related to the previous CSRP format, the one that has been abandoned.
+
+\section{Conclusion}
 Our BCSR SpMV implementation could handle most of the sparse matrix cases, it do not depends on the distribution of number of non zeros in each row, and with the help of LMem and multi-pumping, we could store very large vector for calculation. Multi-pumping here not only reduces the DSP usage, but also reduce a large amount of BRAM usage, which is the resource bottleneck of our SpMV design. 
 
 The way we apply multi-pumping on a non multi-pumped SpMV design suggests that our multi-pumping methodology will work perfectly, and could adapt to many different circumstances.
@@ -285,19 +361,144 @@ How could we know where exists the cyclic loop, and where to put our \texttt{pus
 
 For the first problem, we could detect cyclic loop by using the input and output node number of each ruby gate, generated by ruby compiler. If the output node number is less than one of the input nodes number, then there definitely exists a cyclic loop. This feature is geranteed by Ruby compiler.
 
+Here's the code snippet related to this solution:
+
+\begin{lstlisting}[caption=Revision to fix cyclic loop]
+(pushPipelineIfCyclic (inNodes, outp)) ^
+(showGate (maxBackPatchForwardDeclaration) (device, input, output)) ^
+(popPipelineIfCyclic (inNodes, outp))
+\end{lstlisting}
+
+The \texttt{showGate} function is the one output the string of MaxJ's assignment instructions, and we wrap this up if there's a cyclic loop within. Those \texttt{pushPipelineIfCyclic} or pop functions first detect the input nodes of this current gate, if this gate contains input nodes \texttt{inNodes} that is larger than the output nodes \texttt{outp}, we will output a string that push/pop pipelining factor 0.
+
+\begin{lstlisting}[caption=Implementation of cyclic loop detector]
+fun isCyclicLoop(inNodes, outp) = 
+    List.foldl (fn (x, b) => ((x > outp) orelse b)) true inNodes
+
+fun pushPipelineIfCyclic (inNodes, outp) = 
+    if isCyclicLoop(inNodes, outp) 
+    then "   optimization.pushPipeliningFactor(0);\n" 
+    else ""
+
+fun popPipelineIfCyclic (inNodes, outp) = 
+    if isCyclicLoop(inNodes, outp) 
+    then "   optimization.popPipeliningFactor();\n" 
+    else ""
+\end{lstlisting}
+
 \subsection{Restriction}
 
 As I've mentioned before, this solution is far from perfect. We simply banned pipelining, and the direct result would be a tremendously low maximal frequency we could achieve, especially we want to do complex design.
 
 \section{Serialization primitives translation}
 
+Most of the ruby's serialization primitives work fine while we're translating them from ruby to MaxJ, for example, \texttt{DI} the delay unit will be translated to \texttt{stream.offset} as what we expect. However, there're 2 more primitives that can't be correctly translated: \texttt{pdsr} and \texttt{sdpr}.
+
 \subsection{Background}
 
-\subsection{Kernel partition algorithm}
+\texttt{pdsr n} is a primitive which takes a n list of elements, and output 1 by 1 in the following n cycles. And \texttt{sdpr n} do things in reverse, they take n elements and output a n list in one cycle. The reason why this is not supported is that, the current ruby to MaxJ translation code could only support one kernel generation, \texttt{pdsr} and \texttt{sdpr} need to change the clock rate between those input and output ports. As we know that we could only assign one clock rate for one kernel in MaxJ, so it's impossible to do this if there's no multiple kernels generation mechanism supported.
 
-\subsection{Result and restriction}
+Things are more difficult as there's no primitives that support kernel partition functionality. Programmers couldn't assign which part of the ruby circuit should be in one kernel. So we should choose whether to revise the ruby syntax and compiler itself, or detect kernels by some heuristic methods. We choose the second one.
 
-\section{Multi-Pumping in Ruby}
+\subsection{Graph labeling algorithm}
+
+Currently, the main purpose of our kernel partitioning is due to clock rate changing while we're translating serialization ruby primitives to MaxJ. It's obvious that we should first(and maybe the last) to detect kernel border by using clock rate. So first of all, we need to generate a graph, or more precisely, a DAG that contains clock rate information. 
+
+We build a graph from the raw output from ruby compiler first, which is called \texttt{pcircuit}. It contains the basic information of one ruby file. This data structure contains 3 components: 2 expressions of domains and ranges, and the relations in ruby code. We should know that there're 2 levels of circuit organization in ruby: The first level is called gate, which contains input and output ports, and one single processing unit(sort of). And the second level is called relation, which contains many gates, and all these gates are connected in parallel, which means they will not have dependencies to each other. The expression is another special type \texttt{expr}, it contains many constructors, but we mainly use the \texttt{WIRE} to get the wire id.
+
+Start from input nodes, we could "flow" from input to output of the ruby file, and during this flowing procedure, we could met \texttt{pdsr} or \texttt{sdpr}, and they will change clock rate from input to output. So if we build have a initialized clock for input wires, and change or remain the same clock rate as the previous wire, then we could build a global graph labeled with clock rate.
+
+\begin{lstlisting}[caption=Build labeled graph]
+val (eL1,iL1) = appendEdgesToEdgeList (exprToEdges dom) []
+val (eL2,iL2) = appendEdgesToEdgeList (exprToEdges ran) eL1
+val g         = appendRelsToGraph rels ([], eL2)
+val setClk    = initGraphClock 1.0 g
+\end{lstlisting}
+
+This code snippet lies in the main procedure of our kernel partitioning algorithm, as the initilization steps. It first append input and output nodes to the graph, and then append relation to build the edges between nodes. At last it will initialize the clock rate for each edge.
+
+\subsection{Kernel partitioning algorithm}
+
+Then we could partition our built graph. As we intends to split the graph by using different clock rate as boundary, the we could start from the input nodes, and mark all those edges which contains different clock rate in input edges and output edges as \textbf{boundary}. The tricky point of this algorithm is, it will stop immediately when we met one different clock rate node, just like a wavefront.
+
+Here's a diagram to show this(Figure 3.1). The components in the dashed rectangle should be partitioned as a new kernel. And all the components outside the 2x clock rate box should be integrated in one. 
+
+\begin{figure}[h!]
+  \caption{Diagram of kernel partitioning}
+  \centering
+    \includegraphics[width=0.5\textwidth]{pdsr}
+\end{figure}
+
+This is the code snippet to do this. It's prefixed with iter as this function will iteratively build the graph. It takes a list of input nodes, and start with input nodes to take all those edges and nodes it met as a graph. It will stop in 2 circumstances: output or met clock rate border. The history list will store those input nodes it has met to avoid infinite loop.
+
+\begin{lstlisting}[caption=Iter partitioning algorithm]
+fun iterSplitGraph [] hs g = []
+    | iterSplitGraph es hs g =
+    ( let 
+        val splitEdgeIds = iterFindSplitEdges es g
+        val splitNewGraph= splitAndFilterEdgesInGraph splitEdgeIds g
+        val newInEdgeIds = getGraphInputEdges splitNewGraph
+        val nextHistory  = es @ hs
+        val nextInEdgeIds= 
+			filterExistEdgeList 
+				(getListCompliment nextHistory newInEdgeIds) 
+				splitNewGraph
+        val build        = iterBuildGraph es splitNewGraph ([],[])
+        val retGraphList = iterSplitGraph nextInEdgeIds nextHistory splitNewGraph
+      in 
+        build::retGraphList
+      end )
+\end{lstlisting}
+
+\subsection{Result: Multi-Pumping in Ruby}
+
+Besides this, we also need some functions to support manager and cpu code printing. I'll not mention them here, but it should be mentioned that the printer function works fine and we could run MaxJ simulation directly from ruby file(by using some Makefile configuration of course).
+
+\begin{figure}[h!]
+  \caption{Diagram of ruby multi-pumping example}
+  \centering
+    \includegraphics[width=0.6\textwidth]{toronto}
+\end{figure}
+
+Here's an generated example of ruby multi-pumping and the generated MaxJ code. Here we will multi-pump one multiplier, make it serve 4 input streams, just like this example(Figure 3.2). If we ignore those pipeline registers and multiplexers, we could build this circuit by using this ruby code:
+
+\begin{lstlisting}
+current = [pdsr 2, pdsr 2]; mult; sdpr 2.
+\end{lstlisting}
+
+Here're the generated MaxJ code. There'll be 2 kernel files generated, the first one only handles the input stream and by using pdsr, we could merge these 4 streams in 2 streams. Then the second kernel will run at 2x clock rate to take the input streams, and do multiplication. 
+
+\begin{lstlisting}[caption=Generated MaxJ code]
+public class CurrentManager extends CustomManager {
+
+public CurrentManager (EngineParameters params) {
+   super(params);
+
+   // kernel block declarations:
+   KernelBlock k0 = addKernel(new Kernel1(makeKernelParameters("Kernel1")));
+   KernelBlock k1 = addKernel(new Kernel2(makeKernelParameters("Kernel2")));
+
+   // kernel block clocks declarations:
+   float clk = 100;
+   config.setDefaultStreamClockFrequency((int)clk);
+   ManagerClock clk0 = generateStreamClock("clk0", (int)(clk * 1.0));
+   k0.setClock(clk0);
+   ManagerClock clk1 = generateStreamClock("clk1", (int)(clk * 2.0));
+   k1.setClock(clk1);
+
+   // DFELinks declarations:
+   addStreamToCPU("board2cpu_0") <== k1.getOutput("out4");
+   addStreamToCPU("board2cpu_1") <== k1.getOutput("out3");
+   k1.getInput("inp6") <== k0.getOutput("out2");
+   k1.getInput("inp5") <== k0.getOutput("out1");
+   k0.getInput("inp4") <== addStreamFromCPU("cpu2board_0");
+   k0.getInput("inp3") <== addStreamFromCPU("cpu2board_1");
+   k0.getInput("inp2") <== addStreamFromCPU("cpu2board_2");
+   k0.getInput("inp1") <== addStreamFromCPU("cpu2board_3");
+
+   createSLiCinterface(interfaceDefault());
+} // end constructor
+\end{lstlisting}
 
 \begin{appendices}
 \chapter{Weekly Report Archive}
